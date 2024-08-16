@@ -46,7 +46,7 @@ fun main() {
             }
         }
     }
-    Thread.sleep(3000_000L)
+    Thread.sleep(30_000L)
 
 }
 
