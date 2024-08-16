@@ -30,24 +30,36 @@ private val client = OkHttpClient.Builder()
     .build()
 
 
-fun main() {
-    with(CoroutineScope(EmptyCoroutineContext)) {
+fun main() = runBlocking {
+   val job = with(CoroutineScope(EmptyCoroutineContext)) {
         launch {
             try {
-                val posts = getPosts(client)
-                    .map { post ->
-                        async {
-                            PostWithComments(post, getComments(client, post.id))
-                        }
-                    }.awaitAll()
-                println(posts)
+                val postsTypeToken = object : TypeToken<List<Post>>() {}
+                println(isActive)
+                client.apiCall(
+                    "$BASE_URL/api/slow/posts"
+                ).let { response ->
+                    if (!response.isSuccessful) {
+                        response.close()
+                        throw RuntimeException(response.message)
+                    }
+                    println(isActive)
+                    val body = response.body ?: throw RuntimeException("response body is null")
+                    gson.fromJson(body.string(), postsTypeToken.type)
+
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
     }
-    Thread.sleep(30_000L)
-
+    delay(500)
+    println(job)
+    job.cancel()
+    delay(500)
+    println(job)
+    delay(5000)
+    println(job)
 }
 
 suspend fun OkHttpClient.apiCall(url: String): Response {
@@ -71,22 +83,3 @@ suspend fun OkHttpClient.apiCall(url: String): Response {
 
     }
 }
-
-suspend fun <T> makeRequest(url: String, client: OkHttpClient, typeToken: TypeToken<T>): T =
-    withContext(Dispatchers.IO) {
-        client.apiCall(url)
-            .let { response ->
-                if (!response.isSuccessful) {
-                    response.close()
-                    throw RuntimeException(response.message)
-                }
-                val body = response.body ?: throw RuntimeException("response body is null")
-                gson.fromJson(body.string(), typeToken.type)
-            }
-    }
-
-suspend fun getPosts(client: OkHttpClient): List<Post> =
-    makeRequest("$BASE_URL/api/slow/posts", client, object : TypeToken<List<Post>>() {})
-
-suspend fun getComments(client: OkHttpClient, id: Long): List<Comment> =
-    makeRequest("$BASE_URL/api/slow/posts/$id/comments", client, object : TypeToken<List<Comment>>() {})
