@@ -24,42 +24,58 @@ private val gson = Gson()
 
 private val client = OkHttpClient.Builder()
     .addInterceptor(HttpLoggingInterceptor(::println).apply {
-        level = HttpLoggingInterceptor.Level.BODY
+        level = HttpLoggingInterceptor.Level.BASIC
     })
     .connectTimeout(30, TimeUnit.SECONDS)
     .build()
 
 
 fun main() = runBlocking {
-   val job = with(CoroutineScope(EmptyCoroutineContext)) {
+    val job = with(CoroutineScope(EmptyCoroutineContext)) {
         launch {
             try {
                 val postsTypeToken = object : TypeToken<List<Post>>() {}
-                println(isActive)
-                client.apiCall(
+                val posts: List<Post> = client.apiCall(
                     "$BASE_URL/api/slow/posts"
                 ).let { response ->
                     if (!response.isSuccessful) {
                         response.close()
                         throw RuntimeException(response.message)
                     }
-                    println(isActive)
                     val body = response.body ?: throw RuntimeException("response body is null")
                     gson.fromJson(body.string(), postsTypeToken.type)
-
+                }
+                val id = posts.last().id
+                launch {
+                    try {
+                        val commentsTypeToken = object : TypeToken<List<Comment>>() {}
+                        val comments: List<Comment> = client.apiCall(
+                            "$BASE_URL/api/slow/posts/$id/comments"
+                        ).let { response ->
+                            if (!response.isSuccessful) {
+                                response.close()
+                                throw RuntimeException(response.message)
+                            }
+                            val body = response.body ?: throw RuntimeException("response body is null")
+                            gson.fromJson(body.string(), commentsTypeToken.type)
+                        }
+                        println(comments)
+                        println(this)
+                        println("$isActive in child job")
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
     }
-    delay(500)
-    println(job)
+    delay(3000)
+    println(job.children.joinToString(", "))
     job.cancel()
-    delay(500)
-    println(job)
-    delay(5000)
-    println(job)
+    println(job.children.joinToString(", "))
+    job.join()
 }
 
 suspend fun OkHttpClient.apiCall(url: String): Response {
